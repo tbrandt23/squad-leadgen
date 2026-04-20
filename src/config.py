@@ -12,7 +12,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-load_dotenv(PROJECT_ROOT / ".env")
+load_dotenv(PROJECT_ROOT / ".env", override=True)
 
 ANTHROPIC_API_KEY: str | None = os.getenv("ANTHROPIC_API_KEY")
 PERPLEXITY_API_KEY: str | None = os.getenv("PERPLEXITY_API_KEY")
