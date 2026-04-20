@@ -1,0 +1,22 @@
+# Environment
+.env
+*.env
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.venv/
+venv/
+
+# Data outputs
+data/leads.csv
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
