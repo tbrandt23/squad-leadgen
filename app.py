@@ -19,6 +19,7 @@ except (FileNotFoundError, st.errors.StreamlitAPIException):
 import pandas as pd  # noqa: E402
 
 from src import storage  # noqa: E402
+from src.creator_discovery import find_brands_for_creator  # noqa: E402
 from src.lead_agent import process_lead  # noqa: E402
 
 DEMO_MODE = os.getenv("DEMO_MODE", "").lower() in ("1", "true", "yes")
@@ -156,20 +157,28 @@ def main() -> None:
     storage.init_csv_if_missing()
 
     with st.sidebar:
-        st.header("Add a brand")
+        st.header("Add leads")
+        mode = st.radio(
+            "Discovery mode",
+            ["By brand", "By creator handle"],
+            help="Creator mode asks Perplexity which DTC brands the creator "
+                 "has posted sponsored content for, then auto-qualifies each.",
+        )
+        disabled = DEMO_MODE
         if DEMO_MODE:
-            st.caption("Demo mode: Run agent disabled to protect API credits. "
+            st.caption("Demo mode: agent disabled to protect API credits. "
                        "Browse the pre-qualified leads below.")
-            brand = ""
-            run_clicked = False
-            st.text_input("Brand name", placeholder="Disabled in demo mode",
-                          disabled=True)
-            st.button("Run agent", type="primary", use_container_width=True,
-                      disabled=True)
+        if mode == "By brand":
+            query = st.text_input("Brand name",
+                                  placeholder="Disabled in demo mode" if disabled else "e.g. Alo Yoga",
+                                  disabled=disabled)
         else:
-            brand = st.text_input("Brand name", placeholder="e.g. Alo Yoga")
-            run_clicked = st.button("Run agent", type="primary",
-                                    use_container_width=True)
+            query = st.text_input("Creator handle or name",
+                                  placeholder="Disabled in demo mode" if disabled else "e.g. Alix Earle",
+                                  disabled=disabled)
+            st.caption("Top 5 brands the creator has worked with will be qualified.")
+        run_clicked = st.button("Run agent", type="primary",
+                                use_container_width=True, disabled=disabled)
         st.markdown("---")
         try:
             with open(storage._csv_path(), "rb") as f:
@@ -186,14 +195,34 @@ def main() -> None:
 
     _render_hero()
 
-    if run_clicked and brand.strip():
-        with st.spinner(f"Running the agent on {brand.strip()}..."):
-            lead = process_lead(brand.strip())
-            storage.append_lead(lead)
-            if lead.get("error"):
-                st.error(f"Partial result saved. {lead['error']}")
+    if run_clicked and query.strip():
+        if mode == "By brand":
+            with st.spinner(f"Running the agent on {query.strip()}..."):
+                lead = process_lead(query.strip())
+                storage.append_lead(lead)
+                if lead.get("error"):
+                    st.error(f"Partial result saved. {lead['error']}")
+                else:
+                    st.success(f"Added {lead['brand_name']} — score {lead['score']}/10.")
+        else:
+            with st.spinner(f"Finding brands {query.strip()} has partnered with..."):
+                try:
+                    found = find_brands_for_creator(query.strip(), limit=5)
+                except Exception as exc:
+                    st.error(f"Creator discovery failed: {exc}")
+                    found = []
+            if not found:
+                st.warning("No brand partnerships found. Try a more specific handle.")
             else:
-                st.success(f"Added {lead['brand_name']} — score {lead['score']}/10.")
+                st.info(f"Found {len(found)} brands: {', '.join(found)}. Qualifying each...")
+                progress = st.progress(0.0)
+                for i, brand_name in enumerate(found, start=1):
+                    lead = process_lead(brand_name)
+                    storage.append_lead(lead)
+                    progress.progress(i / len(found),
+                                      text=f"{i}/{len(found)}: {brand_name} → score {lead.get('score', 0)}")
+                progress.empty()
+                st.success(f"Qualified {len(found)} brands from {query.strip()}.")
 
     leads = storage.load_leads()
     if not leads:
