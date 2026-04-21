@@ -2,13 +2,26 @@
 
 from __future__ import annotations
 
+import os
 from collections import Counter
 
-import pandas as pd
 import streamlit as st
 
-from src import storage
-from src.lead_agent import process_lead
+# Propagate Streamlit Cloud secrets into os.environ before importing src
+# modules, since config.py reads keys at import time.
+try:
+    for _key in ("ANTHROPIC_API_KEY", "PERPLEXITY_API_KEY", "DEMO_MODE"):
+        if _key in st.secrets:
+            os.environ[_key] = str(st.secrets[_key])
+except (FileNotFoundError, st.errors.StreamlitAPIException):
+    pass
+
+import pandas as pd  # noqa: E402
+
+from src import storage  # noqa: E402
+from src.lead_agent import process_lead  # noqa: E402
+
+DEMO_MODE = os.getenv("DEMO_MODE", "").lower() in ("1", "true", "yes")
 
 SIGNAL_COLUMNS = [
     ("Creator volume", "creator_volume"),
@@ -144,8 +157,19 @@ def main() -> None:
 
     with st.sidebar:
         st.header("Add a brand")
-        brand = st.text_input("Brand name", placeholder="e.g. Alo Yoga")
-        run_clicked = st.button("Run agent", type="primary", use_container_width=True)
+        if DEMO_MODE:
+            st.caption("Demo mode: Run agent disabled to protect API credits. "
+                       "Browse the pre-qualified leads below.")
+            brand = ""
+            run_clicked = False
+            st.text_input("Brand name", placeholder="Disabled in demo mode",
+                          disabled=True)
+            st.button("Run agent", type="primary", use_container_width=True,
+                      disabled=True)
+        else:
+            brand = st.text_input("Brand name", placeholder="e.g. Alo Yoga")
+            run_clicked = st.button("Run agent", type="primary",
+                                    use_container_width=True)
         st.markdown("---")
         try:
             with open(storage._csv_path(), "rb") as f:
